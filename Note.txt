@@ -893,3 +893,5 @@ Instead, you should pass this via the env kwarg and use double-quotes inside the
 versionadded
 
 2.10.0 The output_processor parameter.
+
+schedule_interval was deprecated, and changed to just schedule 
