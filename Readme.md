@@ -1,0 +1,824 @@
+look up python's 'with' keyword 
+
+The with keyword in Python is used for context management — it sets up and tears down a resource automatically, so you don't have to do it manually.
+The classic example is opening a file:
+pythonwith open('myfile.txt', 'r') as f:
+    content = f.read()
+Without with, you'd have to do:
+pythonf = open('myfile.txt', 'r')
+content = f.read()
+f.close()  # easy to forget!
+The with block guarantees that cleanup happens automatically when the block ends — even if an error occurs. In the file example, it ensures the file is always closed.
+How it works is that the object being used (like a file) has two special methods: __enter__ which runs when the block starts, and __exit__ which runs when the block ends. Python calls these for you behind the scenes.
+Common uses include:
+
+Opening files
+Database connections
+Network connections
+Thread locks
+And as you saw in your Airflow code — defining a DAG, where the with DAG(...) as dag: block ensures all the tasks defined inside it are automatically registered to that DAG
+
+So in your Airflow code, the with block is what makes Airflow aware that your BashOperator belongs to the hello_world DAG. Without it you'd have to manually pass the DAG reference to every single task.
+
+
+
+"Operator" here is an Airflow term, not a general Python term.
+In everyday programming, "operator" usually refers to symbols like +, -, ==, > etc. But in Apache Airflow, an Operator is a completely different concept — it's a class that defines a single unit of work in your pipeline. Each operator becomes a task when you instantiate it inside a DAG.
+Think of it this way: the DAG is the workflow blueprint, and operators are the building blocks that do the actual work within it.
+Airflow comes with many built-in operators, for example:
+
+BashOperator — runs a bash shell command (what you're using here)
+PythonOperator — executes a Python function
+EmailOperator — sends an email
+HttpOperator — makes an HTTP request to an API
+SqlOperator / PostgresOperator / MySqlOperator — runs SQL queries against databases
+S3Operator / GCSOperator — interacts with cloud storage
+DockerOperator — runs a Docker container
+TriggerDagRunOperator — triggers another DAG to run
+BranchPythonOperator — conditionally branches the workflow based on logic
+
+You can also write your own custom operators by subclassing Airflow's BaseOperator class, which is one of Airflow's most powerful features.
+So in your code, BashOperator is being instantiated as task, assigned to the DAG, and when the DAG runs on its @daily schedule, that task will execute echo Hello World Once Again. in a shell.
+
+exit 99 statement in the script casues airflow to skip the task
+exit 130 causes the task to fail
+
+Actually, that's not quite right. The equivalent of /Users (macOS) or C:\Users (Windows) in both Ubuntu and Fedora is /home. This is consistent across virtually all Linux distributions.
+For example, a user named "john" would have their home folder at /home/john whether they're on Ubuntu, Fedora, or most other Linux distros.
+/usr is something different entirely — it stands for "Unix System Resources" and contains system-wide programs, libraries, and shared files (similar to C:\Program Files in a loose sense). It has nothing to do with user home directories despite the name looking like "user."
+
+Jinja — the templating engine built into Airflow that lets you use dynamic expressions in your DAGs and task parameters (e.g., {{ ds }} for the execution date). This is a very common Airflow topic. 
+
+Jinja templating in Airflow allows you to dynamically insert values into your tasks at runtime. For example, in a SQL query or a bash command you can use things like {{ ds }} (execution date), {{ params.my_param }}, or any number of built-in Airflow variables. When the task runs, Airflow renders the template and substitutes those placeholders with real values.
+template_searchpath is a parameter you set on the DAG itself. It tells Airflow where to look for external template files (like .sql or .sh scripts) that you want to reference in your tasks rather than writing everything inline in your Python DAG file. So instead of embedding a long SQL query as a string in your code, you can put it in a .sql file, and Airflow will find it using the path(s) you defined in template_searchpath.
+A simple example would be something like:
+pythondag = DAG(
+    'my_dag',
+    template_searchpath='/opt/airflow/scripts'
+)
+Then in a task you could reference my_query.sql directly, and Airflow knows to look in that folder for it. The SQL file itself can also contain Jinja placeholders, which Airflow will render at runtime.
+So the two concepts work hand in hand — template_searchpath points to your files, and Jinja handles the dynamic rendering within them.
+
+to make the process of activating the Virtual Environment automatic, add 
+source ~/airflow-venv/bin/activate 
+to ~/.bashrc
+
+ti represents a task instance and allows a method to pull values from xcom 
+
+I am working on airflow and I forgot if there is a reason for creating scripts directory under dags. Can I not just put the scripts in the DAGs directory? Am I doing this for organization or does airflow mandate it for some reason?
+
+Gemini said
+The short answer is: Airflow does not mandate a scripts/ directory, but your future self will definitely thank you for using one.
+
+Technically, you could dump every .py, .sh, or .sql file directly into the root of your DAGS_FOLDER, but that usually leads to a messy UI and unnecessary performance overhead.
+
+Here is the breakdown of why the scripts/ subdirectory is the industry standard.
+
+1. Preventing "Ghost" DAGs in the UI
+Airflow’s scheduler periodically "scans" every file in your DAGS_FOLDER to see if it contains the strings dag and airflow.
+
+The Risk: If you put a Python script (like a data processing utility) in the root directory and it happens to import Airflow or use the word "dag" in a comment, Airflow might try to parse it as a DAG.
+
+The Result: You get "Broken DAG" import errors in your web UI or, worse, a script appearing as a DAG that was never meant to be one.
+
+2. The .airflowignore Factor
+By default, the scheduler spends resources looking at every file in the root. By tucking your helper scripts into a dedicated folder, you can easily tell Airflow to stop looking there.
+
+You can create a .airflowignore file in your root directory.
+
+Add the line scripts/ to it.
+
+Performance Win: The scheduler now ignores that folder entirely, making DAG parsing faster and reducing CPU usage.
+
+3. Better Organization & Maintainability
+As your project grows, your folder structure should ideally look like this:
+
+Directory/File	Purpose
+dags/	Only high-level DAG definition files.
+dags/scripts/	Bash scripts, SQL queries, or complex Python logic.
+dags/utils/	Shared helper functions and custom classes.
+dags/tests/	Unit tests for your pipeline logic.
+4. Handling Python Imports
+If you put your scripts in a subdirectory, you can treat that directory as a Python package.
+If you have a file at dags/scripts/data_cleaner.py, you can cleanly import it into your DAG file using:
+
+Python
+from scripts.data_cleaner import clean_payload
+Note: For this to work seamlessly, ensure you have an empty __init__.py file inside the scripts/ folder so Python recognizes it as a module.
+
+The Verdict
+You aren't breaking any rules by putting everything in the root, but you are breaking best practices. Moving scripts to a subdirectory keeps your UI clean, your scheduler fast, and your code modular.
+
+Would you like me to show you how to set up a .airflowignore file to optimize your scheduler's performance?
+
+I meant my bash-scripts are in a subfolder of dags
+
+Gemini said
+Ah, I see! You’ve already got your .sh files tucked away in a subfolder. That is actually the recommended setup.
+
+Since Airflow isn't trying to execute Bash files as DAGs (it only looks for Python files), you don't have to worry about "Ghost DAGs." However, there is a very specific technical reason why keeping them in a subfolder is superior to the root dags/ folder: Template Search Paths.
+
+Why a Subfolder Wins for Bash
+When you use a BashOperator, you generally don't want to hardcode long scripts inside your Python file. Instead, you point to a file:
+
+Python
+# This looks for the script relative to the DAG file or search path
+task_run_script = BashOperator(
+    task_id='run_my_script',
+    bash_command='my_script.sh ',  # Airflow needs to know where to find this
+    dag=dag,
+)
+1. Clean template_searchpath
+By default, Airflow looks for files relative to the directory where the DAG file lives. If you put 20 Bash scripts in the root dags/ folder, it gets cluttered.
+
+By using a subfolder, you can define a template_searchpath in your DAG arguments. This tells Airflow, "If you can't find a file I referenced, look in this specific folder."
+
+Python
+dag = DAG(
+    'my_dag',
+    template_searchpath='/usr/local/airflow/dags/scripts/', # Look here for .sh or .sql
+    ...
+)
+2. Relative vs. Absolute Paths
+If your script is in dags/scripts/process_data.sh, and your DAG is in dags/my_dag.py:
+
+In the subfolder: You reference it as bash_command='scripts/process_data.sh'.
+
+In the root: You just use bash_command='process_data.sh'.
+
+The subfolder method is better because it prevents namespace collisions. If you have two different DAGs that both need a cleanup.sh, you can have scripts/dag_a/cleanup.sh and scripts/dag_b/cleanup.sh without them overwriting each other or causing confusion.
+
+3. Security and Portability
+Keeping scripts in a subfolder makes it easier to manage permissions. In some production environments, the dags/ root might have strict sync settings, while a scripts/ folder might be mounted differently or handled by a different CI/CD pipeline step.
+
+Summary
+You aren't doing it because Airflow forces you; you're doing it to:
+
+Keep the template_searchpath organized.
+
+Avoid cluttering the UI's parsing logic (even if it's just a few milliseconds of saved time).
+
+Prevent naming conflicts between different scripts.
+
+If I am running airflow standalone, do I need the scheduler? I am following instructions that say to restart scheduler and the web server after installing Pandas
+
+Gemini said
+Yes, you absolutely need the Scheduler.
+
+In Airflow, the Webserver is just the "window" into your workflows—it lets you see what’s happening, but it doesn't actually do any work. The Scheduler is the "brain" and the "engine." Without it, your DAGs will just sit there in a queued or scheduled state forever, and nothing will ever actually run.
+
+Why you have to restart both
+When you install a new library like pandas, you are changing the Python environment. Here is why both components need a "refresh":
+
+The Scheduler: It needs to parse your DAG files to understand the tasks. If your DAG has import pandas, the Scheduler needs to "see" that Pandas is now available in the environment to avoid an ImportError when it tries to schedule the tasks.
+
+The Webserver: It also parses the DAGs to render the UI. If the Webserver doesn't see Pandas, you’ll get a giant red "Broken DAG" error banner at the top of your screen, even if the Scheduler is working fine.
+
+Airflow Architecture at a Glance
+Component	Role	Why it needs a restart after pip install
+Metadata DB	Stores task states.	No restart needed (it's just a database).
+Webserver	Shows you the UI.	To clear "Import Errors" and render the DAG correctly.
+Scheduler	Triggers and runs tasks.	To recognize the new library and execute the code.
+
+
+PythonOperator has moved to from airflow.providers.standard.operators.python in airflow v3. It was in airflow.operators.python_operator
+
+If you see stale information in the web server clear pycache 
+
+What are the restribtions or constraints of python files in the dag folder? Can I not have more than one? Do I need to be cautious with the names?
+
+Gemini said
+In the world of Airflow, the dags folder is the "heart" of your orchestration, but it’s definitely a high-maintenance heart. Since Airflow scans this folder constantly (by default every 30 seconds), you have to be careful about what you put in there.
+
+Here are the primary restrictions and best practices for managing Python files in that folder:
+
+1. Can you have more than one file?
+Yes, absolutely. You can have hundreds of files. In fact, splitting your DAGs into multiple files is a best practice.
+
+One DAG per file: Generally, it’s cleaner to keep one logical DAG per .py file.
+
+Multiple DAGs per file: You can define multiple DAG objects in a single file, and Airflow will pick up all of them, provided they are in the globals() scope (i.e., not tucked away inside a function that doesn't return them).
+
+2. Naming Constraints
+There aren't many "hard" restrictions, but there are several "soft" ones that will save you from headaches:
+
+Avoid collisions: Do not name your file the same as a Python standard library or a popular package (e.g., don't name your file csv.py, pandas.py, or json.py). This will cause import errors that are notoriously hard to debug.
+
+The "Airflow" String: By default, Airflow looks for the strings airflow and dag (case-insensitive) in the file content to decide if it's worth parsing. If your file doesn't contain these, it might be ignored unless you've changed the DAG_DISCOVERY_SAFE_MODE setting.
+
+Naming for humans: Use descriptive names like marketing_daily_ingestion.py rather than dag1.py.
+
+3. The "Top-Level Code" Rule (Most Important)
+This is where most beginners trip up. Because Airflow executes the code in your files every 30 seconds to look for changes:
+
+NO heavy lifting: Never put database queries, API calls, or heavy computations at the top level of the script (outside of an operator or a task function).
+
+The Result: If you put a time.sleep(10) or a heavy DB query at the top level, you will slow down the entire Scheduler, potentially causing "zombie" tasks or missed schedules.
+
+4. Special Files
+.airflowignore: This is your best friend. If you have utility scripts, helper functions, or local data files in your dags folder that aren't actually DAGs, list them in a .airflowignore file. This tells Airflow, "Don't bother looking at these," which saves CPU and memory.
+
+__init__.py: If you are using subfolders to organize your code, you usually need an empty __init__.py in those subfolders to make them treatable as Python packages for imports.
+
+Summary Table
+Feature	Constraint / Best Practice
+File Count	No hard limit, but thousands of files can slow down parsing.
+File Names	Avoid naming them after common libraries (e.g., test.py or util.py).
+Parsing	Files must typically contain the word airflow or dag to be detected.
+Performance	Never put API calls or DB connections in the top-level global scope.
+Organization	Use subfolders and an .airflowignore file to keep the folder tidy.
+
+Looking at this code, I want to make sure I understand what it is doing. 
+def remove_null_values(**kwargs):  <-- pointer to kwargs
+    ti = kwargs['ti'] <--This is a pointer to the ti object? 
+    json_data = ti.xcom_pull(taks_ids='read_csv_file') <-I know this one. 
+    The other task is returning some data. What are other methods ti makes available?
+    df = pd.read_json(json_data) <-removes null values
+    df = df.dropna() <-?? 
+    print(df)
+    return df.to_json()
+two questions: does python have a library called pickel? If I make changes to a python file, should I clear the pycach?
+
+Gemini said
+To answer your questions: Python does have a library for "pickling," but you have to be careful with the spelling!
+
+1. The pickle Library (Note the spelling)
+Python does not have a library called pickel (with an "e" before the "l"), but it has a very famous built-in library called pickle.
+
+What it does: It is used for serializing and de-serializing Python objects. This means it converts a Python object (like a list, dictionary, or even a custom class) into a byte stream so you can save it to a file or send it over a network.
+
+Security Warning: Never "unpickle" a file from an untrusted source. It can execute arbitrary code during the loading process, which is a major security risk.
+
+Python
+import pickle
+
+# Saving an object
+data = {'age': 25, 'sex': 'female', 'bmi': 27.9}
+with open('data.pkl', 'wb') as f:
+    pickle.dump(data, f)
+2. Should you clear __pycache__?
+In 99.9% of cases: No, you do not need to manually clear it.
+
+Python is smart enough to handle this for you. Here is how it works:
+
+The Mechanism: When you run a Python script, it compiles your .py code into "bytecode" (stored as .pyc files in the __pycache__ folder).
+
+The Check: Every time you run the file, Python compares the timestamp of your .py source file with the timestamp of the compiled .pyc file.
+
+The Update: If the source file is newer (meaning you saved a change), Python automatically re-compiles it and overwrites the old cache.
+
+When should you clear it?
+You only need to delete __pycache__ if you encounter very strange behavior, such as:
+
+Ghost Bugs: You’ve deleted a file or moved it, but Python still seems to be "remembering" the old version.
+
+Corruption: On rare occasions, the .pyc file can become corrupted (though this is very unusual).
+
+Switching Versions: If you are moving a project between significantly different Python versions (e.g., Python 3.8 to 3.12) and the automated tools fail.
+
+Pro Tip: If you want to prevent __pycache__ from being created at all (useful for some production or Docker environments), you can set the environment variable PYTHONDONTWRITEBYTECODE=1.
+
+This is a python source code that I am running in airflow. It looks like the web server does not see the changed file
+
+Gemini said
+That is a classic Airflow frustration! If you've updated your Python file in the dags folder but the Airflow Webserver is still showing you the "old" version (or none at all), it’s usually because of how Airflow’s architecture separates parsing from displaying.
+
+Here is why the Webserver is lagging behind and how to fix it:
+
+1. The "Heartbeat" Delay
+Airflow has a specific synchronization process. The Webserver does not read your Python files directly from the disk. Instead:
+
+The Scheduler parses the dags folder (every min_file_process_interval seconds).
+
+The Metadata Database gets updated with the new DAG structure.
+
+The Webserver reads from the Database to show you the UI.
+
+The Fix: Wait about 30–60 seconds. If it still hasn't updated, the Scheduler might be stuck or overwhelmed.
+
+2. The "Heisenbug" (Syntax Errors)
+If you made a change that introduced a syntax error or an import error, the Scheduler will fail to parse the file.
+
+The Symptom: The Webserver will keep showing the last successful version it had in the database.
+
+The Check: Look at the very top of the Airflow UI for a red banner that says "DAG Import Errors." If that banner is there, click it to see exactly which line of your code is breaking the parser.
+
+3. Webserver Refresh Interval
+The Webserver itself caches the DAG hits. Even if the database is updated, the Webserver might take a moment to refresh its own cache.
+
+The Fix: Click the Refresh button (the circular arrow icon) next to the DAG name in the main DAGs list.
+
+4. Are you using Docker?
+If you are running Airflow in Docker (like via docker-compose), the most common issue is a Volume Mapping problem.
+
+The Check: Run docker exec -it <scheduler_container_name> ls /opt/airflow/dags to see if the file inside the container actually matches the file on your host machine. If it doesn't, your code changes aren't reaching the container.
+
+Summary Checklist for a "Stuck" DAG
+Step	Action	Why?
+1	Check the UI Top Bar	Look for "DAG Import Errors" (Red banners).
+2	Check Scheduler Logs	See if it's actually picking up the file.
+3	Restart Scheduler	Forces a fresh crawl of the dags folder.
+4	Verify File Path	Ensure you didn't accidentally save insurance_v2.py outside the dags/ directory.
+
+The tutoial I am following is for before airflow 3, and I have 3 running on my machine. The instructions say to go to admin, click new connection and select sqlite. But I do not have sqlite option. Is it because I am running a standalone instance?
+
+Gemini said
+Actually, you've stumbled onto one of the biggest changes in Airflow 3.0!
+
+You aren't doing anything wrong, and it’s not because you're in standalone mode. Airflow 3 has completely redesigned how it handles "Providers" (the plugins that let Airflow talk to things like SQLite, AWS, or Postgres).
+
+The "Missing" SQLite Option
+In Airflow 3, the core installation is much leaner. It no longer includes every possible connection type by default.
+
+To see sqlite in that dropdown menu, you usually need to have the apache-airflow-providers-standard package installed, or specifically the common sql provider. Since you are using an Anaconda environment (python310), you can fix this by running this in your terminal:
+
+Bash
+pip install apache-airflow-providers-common-sql
+However... A Pro-Tip for SQLite
+If you are trying to connect to a local SQLite database (like your airflow.db), you technically don't even need the UI for simple file operations. But if the tutorial insists on a Connection:
+
+Check the "Generic" or "SQL" options: Sometimes the provider shows up under a broader category.
+
+The "File" connection: In some cases, people use the File connection type for local data.
+
+Why Airflow 3 is different
+Airflow 3 moved toward a "Plugin" architecture. If you don't have the library installed in your Python environment, Airflow won't show the option in the UI to prevent you from creating a connection that it can't actually use.
+
+A Note on your Standalone Instance
+Since you are running airflow standalone, Airflow is already using SQLite as its own internal metadata database (that airflow.db file in your tree).
+
+If the tutorial is asking you to connect to an external SQLite file, follow the pip install above.
+
+If the tutorial is asking you to connect to Airflow's own database, Airflow already has a reserved connection for that, usually named airflow_db.
+
+Would you like me to show you the terminal command to list all the providers currently installed in your environment so we can see what's missing?
+
+it looks like both packages are installed (python310) firoozyasin@fedora:~/airflow$ airflow providers list
+
+/home/firoozyasin/anaconda3/envs/python310/lib/python3.10/site-packages/airflow/configuration.py:2295 FutureWarning: The 'executor' setting in [core] has the old default value of 'SequentialExecutor'. This value has been changed to 'LocalExecutor' in the running config, but please update your config.
+
+2026-02-22T21:30:09.965302Z [info     ] setup plugin alembic.autogenerate.schemas [alembic.runtime.plugins] loc=plugins.py:37
+
+2026-02-22T21:30:09.965466Z [info     ] setup plugin alembic.autogenerate.tables [alembic.runtime.plugins] loc=plugins.py:37
+
+2026-02-22T21:30:09.965552Z [info     ] setup plugin alembic.autogenerate.types [alembic.runtime.plugins] loc=plugins.py:37
+
+2026-02-22T21:30:09.965634Z [info     ] setup plugin alembic.autogenerate.constraints [alembic.runtime.plugins] loc=plugins.py:37
+
+2026-02-22T21:30:09.965701Z [info     ] setup plugin alembic.autogenerate.defaults [alembic.runtime.plugins] loc=plugins.py:37
+
+2026-02-22T21:30:09.965765Z [info     ] setup plugin alembic.autogenerate.comments [alembic.runtime.plugins] loc=plugins.py:37
+
+package_name                           | description                                                           | version
+
+=======================================+=======================================================================+========
+
+apache-airflow-providers-common-compat | Common Compatibility Provider - providing compatibility code for      | 1.13.0 
+
+                                       | previous Airflow versions                                             |        
+
+apache-airflow-providers-common-io     | Common IO Provider                                                    | 1.7.1  
+
+apache-airflow-providers-common-sql    | Common SQL Provider https://en.wikipedia.org/wiki/SQL                 | 1.30.4 
+
+apache-airflow-providers-smtp          | Simple Mail Transfer Protocol (SMTP)                                  | 2.4.2  
+
+                                       | https://tools.ietf.org/html/rfc5321                                   |        
+
+apache-airflow-providers-standard      | Airflow Standard Provider                                             | 1.11.0 
+
+                                                                                   
+
+Gemini said
+Since those packages are clearly installed, the issue is likely a small UI quirk or a "Provider" vs "Connection" naming convention change in the Airflow 3 interface.
+
+In Airflow 3, SQLite connections are handled via the Generic SQL connection type or, more specifically, by typing the name into the connection type field if it doesn't appear in the immediate scrollable list.
+
+However, if you just want to get your tutorial moving without wrestling with the UI dropdown, you can create the connection via the Airflow CLI. This bypasses the UI constraints entirely.
+
+Create the Connection via CLI
+Open your terminal (in your python310 env) and run this command. Replace the path with wherever you want your SQLite database to live:
+
+Bash
+airflow connections add 'my_sqlite_conn' \
+    --conn-type 'sqlite' \
+    --conn-host '/home/firoozyasin/airflow/dags/datasets/my_database.db'
+Once you run this, refresh your Airflow UI and go to Admin -> Connections. You will see my_sqlite_conn in the list, and you can use that ID in your code.
+
+Why it might be "Missing" in the UI
+Search, don't just scroll: In Airflow 3, the connection type dropdown is often a searchable field. Try clicking it and typing "sqlite"—sometimes it filters the list only when you start typing.
+
+The "Standard" Provider Lag: Sometimes the Webserver needs a hard restart to re-scan the entry points of installed providers. If you haven't restarted since the pip install, run:
+
+CTRL+C on your standalone process.
+
+Run airflow standalone again.
+
+A Quick Note on your Log Warning
+I noticed this in your output:
+
+FutureWarning: The 'executor' setting in [core] has the old default value of 'SequentialExecutor'. This value has been changed to 'LocalExecutor' in the running config.
+
+This is a sign that Airflow 3 is trying to move you away from the older, slower "one-task-at-a-time" way of running.
+
+SequentialExecutor: Runs one task at a time (uses SQLite).
+
+LocalExecutor: Can run multiple tasks in parallel (usually requires Postgres/MySQL).
+
+Since you are using SQLite for your metadata database, SequentialExecutor is actually the safe bet. You can ignore the warning for now, but it's good to know that Airflow 3 is nudging you toward a more robust setup.
+
+Would you like me to show you how to test if your code can actually "talk" to that SQLite connection once you've created it?
+airflow connections get my_sqlite_conn
+/home/firoozyasin/anaconda3/envs/python310/lib/python3.10/site-packages/airflow/configuration.py:2295 FutureWarning: The 'executor' setting in [core] has the old default value of 'SequentialExecutor'. This value has been changed to 'LocalExecutor' in the running config, but please update your config.
+2026-02-22T21:46:04.719286Z [info     ] setup plugin alembic.autogenerate.schemas [alembic.runtime.plugins] loc=plugins.py:37
+2026-02-22T21:46:04.719412Z [info     ] setup plugin alembic.autogenerate.tables [alembic.runtime.plugins] loc=plugins.py:37
+2026-02-22T21:46:04.719467Z [info     ] setup plugin alembic.autogenerate.types [alembic.runtime.plugins] loc=plugins.py:37
+2026-02-22T21:46:04.719519Z [info     ] setup plugin alembic.autogenerate.constraints [alembic.runtime.plugins] loc=plugins.py:37
+2026-02-22T21:46:04.719573Z [info     ] setup plugin alembic.autogenerate.defaults [alembic.runtime.plugins] loc=plugins.py:37
+2026-02-22T21:46:04.719635Z [info     ] setup plugin alembic.autogenerate.comments [alembic.runtime.plugins] loc=plugins.py:37
+   |          |          |         |      |          |       |         |      |          | is_extr |          |         
+   |          | conn_typ | descrip |      |          |       | passwor |      | is_encry | a_encry | extra_de |         
+id | conn_id  | e        | tion    | host | schema   | login | d       | port | pted     | pted    | json     | get_uri 
+===+==========+==========+=========+======+==========+=======+=========+======+==========+=========+==========+=========
+1  | my_sqlit | sqlite   | None    |      | /home/fi | None  | None    | None | False    | False   | {}       | sqlite:/
+   | e_conn   |          |         |      | roozyasi |       |         |      |          |         |          | //%2Fhom
+   |          |          |         |      | n/airflo |       |         |      |          |         |          | e%2Ffiro
+   |          |          |         |      | w/databa |       |         |      |          |         |          | ozyasin%
+   |          |          |         |      | se/my_sq |       |         |      |          |         |          | 2Fairflo
+   |          |          |         |      | lite.db  |       |         |      |          |         |          | w%2Fdata
+   |          |          |         |      |          |       |         |      |          |         |          | base%2Fm
+   |          |          |         |      |          |       |         |      |          |         |          | y_sqlite
+   |          |          |         |      |          |       |         |      |          |         |          | .db     
+                                                                                                                        
+
+Success! The CLI output confirms that Airflow has registered your connection.
+
+However, there is one tiny detail in that output we should tighten up. Notice that the conn_type is listed as generic.
+
+In Airflow 3, if the sqlite provider isn't explicitly recognized during the CLI command, it defaults to generic. While this might work, it's safer to ensure Airflow knows to use the SQLite driver specifically, especially if you plan to use SQLExecuteQueryOperator.
+
+1. Fix the Connection Type
+To be safe, let’s re-run the command with the explicit sqlite:// prefix in the URI, or update it to ensure the protocol is correct. SQLite connections in Airflow are unique because the "host" is actually the file path.
+
+Run this to overwrite the previous one with the specific sqlite type:
+
+Bash
+airflow connections add 'my_sqlite_conn' \
+    --conn-uri 'sqlite:////home/firoozyasin/airflow/database/my_sqlite.db'
+(Note the four slashes: sqlite:// is the protocol, and //home/... is the absolute path starting from root).
+
+2. Why the path matters now
+Looking at your tree from earlier, you had a folder called datasets. In this CLI command, you used a folder called database.
+
+Quick Check: Does the directory /home/firoozyasin/airflow/database/ actually exist?
+
+SQLite will create the .db file for you, but it cannot create the folder. If the folder doesn't exist, your DAG will fail with an "OperationalError: unable to open database file."
+
+3. Your next step in the pipeline
+Now that the connection is ready, you can move away from just saving CSVs and actually load your cleaned insurance data into a table.
+
+Here is how you would add a "Load" task to your existing pipeline:
+
+Python
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
+
+# ... inside your DAG definition ...
+
+load_to_sqlite = SQLExecuteQueryOperator(
+    task_id="load_to_sqlite",
+    conn_id="my_sqlite_conn",
+    sql="""
+    CREATE TABLE IF NOT EXISTS insurance_stats (
+        region TEXT,
+        avg_age REAL,
+        avg_bmi REAL,
+        avg_charges REAL
+    );
+    -- In a real scenario, you'd use a more complex INSERT or an InsertMap
+    """
+)
+
+# Add it to your dependencies
+[groupby_smoker, groupby_region] >> load_to_sqlite
+Would you like me to show you how to use the Pandas.to_sql() method inside one of your Python functions to write the dataframe directly to this new connection?
+
+In Airflow 3, the reason your code is failing is that the SqliteOperator has been deprecated and moved.
+
+Airflow is moving toward "Generic" SQL operators that work for any database. Using the old import path will result in a ModuleNotFoundError.
+
+1. The Correct Library
+You should use the SQLExecuteQueryOperator. It is part of the common.sql provider, which you already confirmed is installed on your machine.
+
+Update your import to this:
+
+Python
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
+2. Fixing the Code
+There are three small "nitty-gritty" issues in your script that will cause it to fail even after you fix the import:
+
+The Parameter Name: The new operator uses conn_id instead of sqlite_conn_id.
+
+The SQL Syntax: You have a space in is active. SQL column names cannot have spaces unless they are quoted. It should be is_active.
+
+The Argument: In Airflow 3, schedule_interval is becoming just schedule.
+
+Updated working version:
+Python
+import pendulum
+from airflow import DAG
+# New standard import for Airflow 3
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
+
+default_args = {"owner": "admin"}
+
+with DAG(
+    dag_id='executing_sql_pipeline',
+    description='Pipeline using SQL operators',
+    default_args=default_args,
+    start_date=pendulum.datetime(2026, 2, 21, tz="UTC"),
+    schedule='@once', # Simplified from schedule_interval
+    tags=['pipeline', 'sql']
+) as dag: 
+
+    create_table = SQLExecuteQueryOperator(
+        task_id='create_table',
+        sql="""
+            CREATE TABLE IF NOT EXISTS users ( 
+                    id INTEGER PRIMARY KEY,
+                    name VARCHAR(50) NOT NULL,
+                    age INTEGER NOT NULL,
+                    is_active BOOLEAN DEFAULT true, -- Fixed space here
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """,
+        conn_id='my_sqlite_conn' # Changed from sqlite_conn_id
+    )
+
+create_table
+Why the tutorial used SqliteOperator
+Older tutorials (Airflow 1.x and early 2.x) had specific operators for every database (SqliteOperator, MySqlOperator, PostgresOperator). To make the code easier to maintain, the Airflow team combined them into the SQLExecuteQueryOperator. It detects that you are using SQLite based on the conn_id you provided earlier.
+
+Would you like me to show you how to write an INSERT statement to put some of that insurance data into this new table?
+
+Your code is much closer, but there are two specific things that will still cause it to fail when you run it, plus a clarification on your connection.1. The Code FixesEven with the correct import, the SQLExecuteQueryOperator is picky about parameter names and SQL syntax:conn_id vs sqlite_conn_id: The SQLExecuteQueryOperator does not recognize sqlite_conn_id. It uses the generic conn_id for everything.Column Name Space: SQL will crash on is active. You must use an underscore: is_active.Schema vs Host: In your CLI output, the path is under schema. For SQLite, the operator usually expects the path in the host field, or provided via the URI.Here is the corrected version of your task:Python    create_table = SQLExecuteQueryOperator(
+        task_id="create_table",
+        sql="""
+            CREATE TABLE IF NOT EXISTS users ( 
+                    id INTEGER PRIMARY KEY,
+                    name VARCHAR (50) NOT NULL,
+                    age INTEGER NOT NULL,
+                    is_active BOOLEAN DEFAULT true, -- Fixed space
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+        conn_id="my_sqlite_conn", # Changed from sqlite_conn_id
+    )
+2. Do you need to reconfigure your connection?Looking at your new CLI output, you successfully changed the type to sqlite, which is great! However, I noticed the path /home/firoozyasin/... moved into the schema column.Try running the DAG as is first. If it fails with an "Unable to open database" error, it's because SQLite is looking for the file path in the host field.If it fails, run this command to "reset" the connection to the format Airflow 3 loves most (the URI format):Bash# This puts everything in the right place automatically
+airflow connections add 'my_sqlite_conn' \
+    --conn-uri 'sqlite:////home/firoozyasin/airflow/database/my_sqlite.db'
+Summary Checklist for your DAGItemStatusActionImportCorrectfrom airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperatorConnection ParamNeeds FixChange sqlite_conn_id to conn_id.SQL SyntaxNeeds FixChange is active to is_active.Connection TypeGoodYour CLI shows sqlite now, which is perfect for Airflow 3.Would you like me to explain why Airflow 3 moved the SQLite path from "host" to "URI"? (It has to do with making connections more portable!)
+
+In airflow version 3.1.7 or earlier, is there a way to debug the code to validate the actual content of the variables and what is passed to different methods? I am following a tutorial that sometime uses the same names for airflow operators and some of the other variables and it seems like11:38 AMGreat question! Yes, there are several ways to debug and inspect variables in Airflow. Since you're likely dealing with naming confusion between Airflow operators and regular Python variables, here are the most practical approaches:
+
+1. Use print() or Python's logging module inside tasks
+The simplest approach — output appears in the task logs viewable from the Airflow UI:
+import logging
+
+def my_python_task(**context):
+    ti = context['ti']
+    my_var = ti.xcom_pull(task_ids='some_task')
+    
+    print(f"my_var type: {type(my_var)}, value: {my_var}")
+    logging.info(f"context keys: {context.keys()}")
+
+2. Inspect XCom values in the Airflow UI
+Go to Admin → XComs in the Airflow UI to see what values tasks are pushing and pulling. This is great for validating what's actually being passed between tasks without changing any code.
+
+3. Use pdb or breakpoint() for interactive debugging
+If you're running Airflow locally, you can drop a breakpoint inside a PythonOperator callable:
+def my_task(**context):
+    breakpoint()  # execution pauses here in the terminal
+    # inspect variables interactively
+Then trigger the DAG from the CLI (airflow dags test my_dag) so the breakpoint is reachable in your terminal session.
+
+4. Use airflow dags test and airflow tasks test from the CLI
+These commands run tasks locally without the scheduler, making it easier to see output directly:
+airflow tasks test my_dag my_task_id 2024-01-01
+Logs print directly to stdout, so print() and logging output is immediately visible.
+
+5. Clarify naming collisions — what to watch for
+This is likely the core of your confusion. A common pattern in tutorials is reusing names like this:
+python# 'bash_task' is the Python variable holding the operator instance
+bash_task = BashOperator(
+    task_id='bash_task',  # this is the Airflow task ID string
+    bash_command='echo hello'
+)
+Here bash_task (Python variable) and 'bash_task' (the task_id string) are two different things. You can always inspect the Python variable with:
+print(type(bash_task))        # <class 'airflow.operators.bash.BashOperator'>
+print(bash_task.task_id)      # 'bash_task'
+print(bash_task.bash_command) # 'echo hello'
+
+6. Use vars() or dir() to introspect objects
+python code...
+operator_instance = BashOperator(task_id='my_task', bash_command='echo hi')
+print(vars(operator_instance))  # dumps all instance attributes
+
+The most practical combo for following a tutorial is airflow tasks test from the CLI + print()/logging inside your callables — it gives you fast feedback without needing the full scheduler running. Would you like help with a specific part of the code you're debugging?
+
+sqlite3 my_sqlite.db is the command to log into sqlite database
+.tables shows the tables 
+
+.schema users # shows schema of users table 
+
+SELECT * FROM users; # shows the contents of the table 
+
+What is task_id exactly?
+According to the Airflow docs, task_id acts as a unique identifier string for the task within a DAG. A task must include the task_id argument, otherwise Airflow will raise an exception. Apache Airflow
+So the short answer: task_id is always just a plain string. It is not a pointer to a Python method. It's simply a name Airflow uses internally to track, log, and reference the task.
+
+Then what IS the pointer to a Python method?
+This is where the confusion with tutorials comes in. There are two separate things that often share similar names:
+1. The Python variable — holds the operator object in your Python code
+2. The task_id string — Airflow's internal name for the task
+And 3. python_callable — this is the actual pointer to a Python method (only used with PythonOperator).
+Here's an annotated example to make it concrete:
+pythondef my_actual_function():          # <-- Python defines this function
+    print("Hello!")
+
+my_task = PythonOperator(          # <-- 'my_task' is a Python variable holding the operator
+    task_id="my_task",             # <-- this is just a STRING label Airflow uses internally
+    python_callable=my_actual_function  # <-- THIS is the actual pointer to the function
+)
+Notice three things here that often have the same name in tutorials:
+
+my_task — the Python variable
+"my_task" — the string task ID
+my_actual_function — the actual callable (function reference)
+
+Tutorials often write them all with the same name, which is confusing when you're starting out.
+Python background: how Python treats functions vs variables
+Since you're new to Python, this is worth explaining clearly.
+In Python, functions are objects, just like numbers or strings. You can store them in variables and pass them around. There's an important distinction between calling a function and referencing it:
+pythondef say_hello():
+    print("Hello!")
+
+# This CALLS the function immediately (runs it now)
+say_hello()
+
+# This is a REFERENCE to the function (does NOT run it yet)
+my_pointer = say_hello
+
+# Now you can call it later via the reference
+my_pointer()   # prints "Hello!"
+When Airflow's PythonOperator takes python_callable=my_actual_function, it is storing a reference (no parentheses!) to the function. Airflow then calls it later when the task actually runs.
+Putting it all together with debugging
+Coming back to your original Option 1 — when you do ti.xcom_pull(task_ids='some_task'), the string 'some_task' must match the task_id string you gave the upstream operator, not the Python variable name. This is a very common source of bugs in tutorials.
+python# Upstream task
+extract_task = PythonOperator(
+    task_id="extract_data",        # <-- Airflow knows it by THIS string
+    python_callable=my_extract_fn
+)
+
+# Downstream task trying to pull results
+def my_transform(**context):
+    ti = context['ti']
+    
+    # Must use the task_id STRING, not the Python variable name
+    result = ti.xcom_pull(task_ids="extract_data")  # correct ✅
+    # result = ti.xcom_pull(task_ids="extract_task") # wrong ❌ (that's the Python variable name)
+    
+    print(f"Got: {result}, type: {type(result)}")
+Does this help clarify the distinction? If you share a specific snippet from the tutorial that's confusing you, I can walk through it with you directly.
+
+Where to put breakpoint() in your code
+The tricky thing here is that your code uses SQLExecuteQueryOperator, not a PythonOperator. There's no Python function body to drop a breakpoint() into — the SQL just gets handed off to Airflow/SQLite to execute.
+So your options are:
+Option A — Add a PythonOperator task just for debugging:
+pythonfrom airflow.operators.python import PythonOperator
+
+def debug_task(**context):
+    breakpoint()  # execution pauses here
+    print(f"Context keys: {context.keys()}")
+    print(f"DAG id: {context['dag'].dag_id}")
+
+debug = PythonOperator(
+    task_id="debug",
+    python_callable=debug_task,
+    dag=dag,
+)
+
+create_table >> debug   # run after create_table
+Option B — Wrap the SQL in a PythonOperator temporarily:
+pythondef debug_sql(**context):
+    breakpoint()  # inspect anything you want here before SQL runs
+    from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
+    # just inspect variables, then let it proceed
+
+The correct CLI command for your DAG
+Your DAG id is "executing_sql_pipeline", so the command would be:
+bashairflow dags test executing_sql_pipeline
+Or to test just one specific task:
+bashairflow tasks test executing_sql_pipeline debug 2026-02-21
+```
+
+Note: `airflow dags test` (not `my_dag` — that was just a placeholder name in my earlier example).
+
+---
+
+## One thing to be aware of with `breakpoint()`
+
+When execution pauses at `breakpoint()`, you get dropped into Python's interactive debugger (`pdb`). Some useful commands once you're inside:
+
+| Command | What it does |
+|---|---|
+| `p variable_name` | print a variable's value |
+| `type(variable_name)` | check the type |
+| `n` | go to next line |
+| `c` | continue execution |
+| `q` | quit |
+
+So for example once paused you could type:
+```
+p context.keys()
+p context['dag'].dag_id
+
+Also — your import syntax
+I noticed your imports use double underscores like import __time__. In standard Python those are written without underscores:
+pythonimport time
+import pendulum
+import logging
+from datetime import datetime, timedelta
+from airflow import DAG
+The double underscores might just be formatting from wherever you copied the code, but worth double-checking your actual file.
+
+For the following error...
+Timestamp: 2026-02-23 13:15:19
+
+Traceback (most recent call last):
+  File "/home/firoozyasin/anaconda3/envs/python310/lib/python3.10/site-packages/airflow/sdk/bases/operator.py", line 522, in apply_defaults
+    result = func(self, **kwargs, default_args=default_args)
+  File "/home/firoozyasin/anaconda3/envs/python310/lib/python3.10/site-packages/airflow/sdk/bases/operator.py", line 1052, in __init__
+    raise TypeError(
+TypeError: Invalid arguments were passed to SQLecuteQueryOperator (task_id: create_table). Invalid arguments were:
+**kwargs: {'sqlite_conn_id': 'my_sqlite_conn'}
+
+the issue was that I used the wrong parameter name for SqliteOperator(). I used sqlite_conn_id but I should have used conn_id. Since the tutorial uses sqlite_conn_id I think this is another item to watch between different versions. Here is AI advice and output (It's very
+good, make sure to review): 
+The error message is very clear and helpful here! It says:
+
+Invalid arguments were: **kwargs: {'sqlite_conn_id': 'my_sqlite_conn'}
+
+The problem is you're using sqlite_conn_id as the parameter name, but SQLExecuteQueryOperator doesn't accept that. It uses the generic parameter name conn_id instead.
+SQLExecuteQueryOperator is a database-agnostic operator — it works with SQLite, Postgres, MySQL, etc. Because it's generic, it uses conn_id, not a database-specific name like sqlite_conn_id.
+Fix every occurrence in your code:
+python# Wrong ❌
+sqlite_conn_id = 'my_sqlite_conn'
+
+# Correct ✅
+conn_id = 'my_sqlite_conn'
+You need to change this in all four operators: create_table, insert_values_1, insert_values_2, and display_result.
+
+Why this happens — good Python lesson here
+When Airflow sees sqlite_conn_id='my_sqlite_conn', Python doesn't immediately throw an error because **kwargs silently catches any unknown keyword arguments. It's only when Airflow's operator base class inspects what was passed that it realizes sqlite_conn_id isn't a valid parameter and raises the TypeError.
+This is actually a good example of why the error message points you to **kwargs — that's Python telling you "this argument didn't match any known parameter, so it got caught in the leftover bucket."
+
+why do we surround sql statements with "s and what is r for in the following code? insert_values_1 = __SQLExecuteQueryOperator__(
+        task_id = 'insert_values_1',
+sql = r"""
+            INSERT INTO users (name, age, is_active) VALUES
+                ('Julie', 30, false),
+                ('Peter', 55, true),
+                ('Emily',37, false),
+                ('Katrina', 54, false),
+                ('Joseph', 27, true);
+        """,
+conn_id ='my_sqlite_conn',
+dag = dag,2:48 PMGreat questions — two separate things going on here.
+The triple quotes """
+These are Python's multiline string syntax. They let you write a string that spans multiple lines without needing to concatenate or use \n escape characters. It keeps the SQL readable and properly indented. You could technically write it all on one line with regular quotes, but it would be a mess.
+The r prefix
+The r makes it a raw string, which tells Python to ignore backslash escape sequences. So \n stays as the literal characters \ and n instead of being interpreted as a newline, \t stays as-is instead of a tab, etc.
+In this specific query, there are no backslashes, so the r doesn't actually do anything. It's just a defensive habit — SQL can sometimes contain backslashes (for example in LIKE patterns with \_ or \%, or in file paths on Windows), and if you forget the r prefix those could silently break your query. So many developers just always write r"""...""" for SQL strings as a convention to be safe.
+In short: """ = multiline string, r = don't interpret backslashes specially.
+These are the lupdated ibraries for pythonoperator, and branchoperator in v 3
+airflow.providers.standard.operators.python.PythonOperator
+airflow.providers.standard.operators.python.BranchPythonOperator
+The code in executing_branching.py now works with task groups and labels, and you can configure a 
+variable called transform_action to branch and decide with method to run i.e. what to do. 
+task groups
+Edge labels
+The thing to remember is that after you run a task in a task group, its id is task_group_name.task_name 
+like...
+def filter_by_northwest(ti):
+    json_data = ti.xcom_pull(
+        task_ids="reading_and_preprocessing.remove_null_values", key="my_clean_csv"
+    )
+    df = pd.read_json(json_data)
+
+    region_df = df[df["region"] == "northwest"]
+
+    region_df.to_csv(OUTPUT_PATH.format("northwest"), index=False)
+
+Here reading_and_preprocessing is the task group name, and remove_null_values is the task
+id you are pulling the jason_data from. Have a look at the entire code.
+

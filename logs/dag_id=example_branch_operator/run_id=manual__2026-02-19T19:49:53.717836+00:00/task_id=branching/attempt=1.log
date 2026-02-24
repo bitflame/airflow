@@ -1,0 +1,14 @@
+{"timestamp":"2026-02-19T19:49:56.092043Z","level":"info","event":"DAG bundles loaded: dags-folder, example_dags","logger":"airflow.dag_processing.bundles.manager.DagBundlesManager","filename":"manager.py","lineno":179}
+{"timestamp":"2026-02-19T19:49:56.092702Z","level":"info","event":"Filling up the DagBag from /home/firoozyasin/anaconda3/envs/python310/lib/python3.10/site-packages/airflow/example_dags/standard/example_branch_operator.py","logger":"airflow.models.dagbag.BundleDagBag","filename":"dagbag.py","lineno":593}
+{"timestamp":"2026-02-19T19:49:56.116659Z","level":"info","event":"Task instance is in running state","logger":"task.stdout"}
+{"timestamp":"2026-02-19T19:49:56.116783Z","level":"info","event":" Previous state of the Task instance: TaskInstanceState.QUEUED","logger":"task.stdout"}
+{"timestamp":"2026-02-19T19:49:56.116878Z","level":"info","event":"Current task name:branching","logger":"task.stdout"}
+{"timestamp":"2026-02-19T19:49:56.116934Z","level":"info","event":"Dag name:example_branch_operator","logger":"task.stdout"}
+{"timestamp":"2026-02-19T19:49:56.118674Z","level":"info","event":"Done. Returned value was: branch_a","logger":"airflow.task.operators.airflow.providers.standard.operators.python.BranchPythonOperator","filename":"python.py","lineno":230}
+{"timestamp":"2026-02-19T19:49:56.118780Z","level":"info","event":"Branch into branch_a","logger":"airflow.task.operators.airflow.providers.standard.operators.python.BranchPythonOperator","filename":"branch.py","lineno":44}
+{"timestamp":"2026-02-19T19:49:56.119028Z","level":"info","event":"Following branch {'branch_a'}","logger":"airflow.task.operators.airflow.providers.standard.operators.python.BranchPythonOperator","filename":"skipmixin.py","lineno":146}
+{"timestamp":"2026-02-19T19:49:56.119244Z","level":"info","event":"Skipping tasks [('branch_d', -1), ('branch_b', -1), ('branch_c', -1)]","logger":"airflow.task.operators.airflow.providers.standard.operators.python.BranchPythonOperator","filename":"skipmixin.py","lineno":185}
+{"timestamp":"2026-02-19T19:49:56.129392Z","level":"info","event":"Skipping downstream tasks.","logger":"task","filename":"task_runner.py","lineno":1083}
+{"timestamp":"2026-02-19T19:49:56.148793Z","level":"info","event":"Task instance in success state","logger":"task.stdout"}
+{"timestamp":"2026-02-19T19:49:56.148915Z","level":"info","event":" Previous state of the Task instance: TaskInstanceState.RUNNING","logger":"task.stdout"}
+{"timestamp":"2026-02-19T19:49:56.149030Z","level":"info","event":"Task operator:<Task(BranchPythonOperator): branching>","logger":"task.stdout"}
