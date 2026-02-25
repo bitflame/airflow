@@ -26,14 +26,14 @@ def task_c():
     print("TASK C executed!")
 
 
-# cron expression components: min, hour, Day of Month, Month, Year * means every
+# cron expression components: min, hour, Day of Month, Month, Year * means every. Every Sat & Sun every 12 hours
 with DAG(
     dag_id="cron_catchup_backfill",
     description="Using crons, catchup, and backfill",
     default_args=default_args,
-    start_date=pendulum.datetime(2026, 2, 19, tz="UTC"),
+    start_date=pendulum.datetime(2026, 1, 25, tz="UTC"),
     schedule="0 */12 * * 6,0",
-    catchup=True,
+    catchup=False,
 ) as dag:
 
     taskA = BashOperator(task_id="taskA", bash_command='echo TASK A has executed!')
